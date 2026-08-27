@@ -124,6 +124,19 @@ class ExcalidrawCore: NSObject, ObservableObject {
         } catch {
             logger.error("Config consoleHandler failed: \(error)")
         }
+
+        // TEMP DEBUG: trace drag/drop delivery to the page
+        let dragTraceScript = WKUserScript(
+            source: """
+            document.addEventListener('dragover', function(e) { console.log('[dragtrace] dragover', JSON.stringify(Array.from(e.dataTransfer ? e.dataTransfer.types : []))); }, true);
+            document.addEventListener('drop', function(e) { console.log('[dragtrace] drop', JSON.stringify(Array.from(e.dataTransfer ? e.dataTransfer.types : []))); }, true);
+            document.addEventListener('dragenter', function(e) { console.log('[dragtrace] dragenter', JSON.stringify(Array.from(e.dataTransfer ? e.dataTransfer.types : []))); }, true);
+            """,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        )
+        userContentController.addUserScript(dragTraceScript)
+
         
         config.userContentController = userContentController
         
