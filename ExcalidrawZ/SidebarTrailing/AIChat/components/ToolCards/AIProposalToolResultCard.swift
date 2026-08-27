@@ -106,30 +106,40 @@ struct AIProposalToolResultCard: View {
 
 #if os(macOS)
     private func makeProposalDragItemProvider() -> NSItemProvider {
-        let library = ExcalidrawLibrary(
-            type: "excalidrawlib",
-            version: 2,
-            source: "https://excalidraw.com",
-            libraryItems: [
-                ExcalidrawLibrary.Item(
-                    id: UUID().uuidString,
-                    status: .published,
-                    createdAt: Date(),
-                    name: String(localizable: .aiProposalDragName),
-                    elements: artifact.visibleElements
-                )
-            ]
-        )
-        do {
-            let data = Data(try library.jsonStringified().utf8)
-            return NSItemProvider(
-                item: data as NSData,
-                typeIdentifier: UTType.excalidrawlibJSON.identifier
+        // Keep registerDataRepresentation (WebKit drag delivery semantics —
+        // an eager NSItemProvider(item:) makes the webview navigate to the
+        // payload as a file instead of delivering the drop to the page),
+        // but fulfill the completion synchronously so app-quit pasteboard
+        // resolution never deadlocks.
+        let itemProvider = NSItemProvider()
+        itemProvider.registerDataRepresentation(
+            forTypeIdentifier: UTType.excalidrawlibJSON.identifier,
+            visibility: .ownProcess
+        ) { completion in
+            let library = ExcalidrawLibrary(
+                type: "excalidrawlib",
+                version: 2,
+                source: "https://excalidraw.com",
+                libraryItems: [
+                    ExcalidrawLibrary.Item(
+                        id: UUID().uuidString,
+                        status: .published,
+                        createdAt: Date(),
+                        name: String(localizable: .aiProposalDragName),
+                        elements: artifact.visibleElements
+                    )
+                ]
             )
-        } catch {
-            alertToast(error)
-            return NSItemProvider()
+            do {
+                let data = Data(try library.jsonStringified().utf8)
+                completion(data, nil)
+            } catch {
+                alertToast(error)
+                completion(nil, error)
+            }
+            return nil
         }
+        return itemProvider
     }
 #endif
 

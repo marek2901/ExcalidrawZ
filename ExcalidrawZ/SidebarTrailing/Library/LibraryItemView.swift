@@ -103,28 +103,36 @@ struct LibraryItemView: View {
 
 #if os(macOS)
     private func makeLibraryItemDragProvider() -> NSItemProvider {
-        var result: Result<Data, Error>?
-        viewContext.performAndWait {
-            result = Result {
-                let json = try item.excalidrawLibrary.jsonStringified()
-                return Data(json.utf8)
+        // Keep registerDataRepresentation (WebKit drag delivery semantics —
+        // an eager NSItemProvider(item:) makes the webview navigate to the
+        // payload as a file instead of delivering the drop to the page),
+        // but fulfill the completion synchronously so app-quit pasteboard
+        // resolution (CFPasteboardResolveAllPromisedData) never waits on a
+        // CoreData queue mid-teardown.
+        let itemProvider = NSItemProvider()
+        itemProvider.registerDataRepresentation(
+            forTypeIdentifier: UTType.excalidrawlibJSON.identifier,
+            visibility: .ownProcess
+        ) { completion in
+            var result: Result<Data, Error>?
+            viewContext.performAndWait {
+                result = Result {
+                    let json = try item.excalidrawLibrary.jsonStringified()
+                    return Data(json.utf8)
+                }
             }
+            switch result {
+                case .success(let data):
+                    completion(data, nil)
+                case .failure(let error):
+                    alertToast(error)
+                    completion(nil, error)
+                case nil:
+                    completion(nil, nil)
+            }
+            return nil
         }
-
-        guard let result else {
-            return NSItemProvider()
-        }
-
-        switch result {
-            case .success(let data):
-                return NSItemProvider(
-                    item: data as NSData,
-                    typeIdentifier: UTType.excalidrawlibJSON.identifier
-                )
-            case .failure(let error):
-                alertToast(error)
-                return NSItemProvider()
-        }
+        return itemProvider
     }
 #endif
     
